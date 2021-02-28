@@ -1,0 +1,28 @@
+---
+    - 
+      name: "get planet graph service deployment "
+      register: deployment_name
+      shell: "k get deployment -n {{ k8s_ns }} | grep planet-graph-service | awk '{print $1}'"
+    - 
+      debug: 
+        msg: "deployment: {{ deployment_name.stdout }} "
+      name: "DEBUG info:"
+    - 
+      name: "scale planet graph service deployment"
+      shell: "k scale deployment planet-graph-service-deployment -n {{ k8s_ns }} --replicas {{ scaled_replicas }}"
+      when: "deployment_name.stdout != '' and scaled_replicas is defined"
+    - 
+      delay: 60
+      name: "k8s: wait for deployment has available replicas"
+      register: deployment_available_replicas_count
+      retries: 10
+      shell: "k get deployment planet-graph-service-deployment -n {{ k8s_ns }} -o wide |  tail -n +2  | awk '{print $4 }' "
+      until: "deployment_available_replicas_count.stdout == scaled_replicas"
+    - 
+      name: "register planet graph service deployment"
+      register: updated_deployment_name
+      shell: "k get deployment planet-graph-service-deployment -o jsonpath='{.metadata.name}' -n {{ k8s_ns }}  "
+    - 
+      debug: 
+        msg: "scaled planet graph service deployment: {{ updated_deployment_name.stdout }} with  {{ deployment_available_replicas_count.stdout }} replicas"
+      name: "DEBUG info"

@@ -1,0 +1,94 @@
+--- 
+    apiVersion: batch/v1
+    kind: Job
+    metadata: 
+      labels: 
+        app: planet-graph-processor
+      name: planet-graph-processor
+      namespace: {{ k8s_ns }}
+    spec: 
+      completions: {{ job_replicas | int }}
+      parallelism: 2
+      ttlSecondsAfterFinished: {{ job_ttl }}
+      template: 
+        metadata: 
+          labels: 
+            app: planet-graph-processor
+          name: planet-graph-processor-job
+        spec: 
+          initContainers: 
+          - 
+            command: 
+              - /bin/bash
+            args: 
+              - -c
+              - >-
+                rabbit_msg=$(python3 /script/receiver.py | sed -n 1p);
+                export DOCKER_FILE_INPUT_PATH=$rabbit_msg;
+                echo [DEBUG] loading $DOCKER_FILE_INPUT_PATH;
+                mkdir -p {{ fileserver_mount_path }}/input/;
+                mkdir -p {{ fileserver_mount_path }}/result/;
+                echo wget -O {{ fileserver_mount_path }}/input/${DOCKER_FILE_INPUT_PATH}  ftp://{{ fileserver }}:{{ file_port }}/input/${DOCKER_FILE_INPUT_PATH} --no-host-directories  >  {{ fileserver_mount_path }}/wget.sh;
+                sh {{ fileserver_mount_path }}/wget.sh;
+                rm -rf {{ fileserver_mount_path }}/wget.sh;
+                echo  [DEBUG] loaded $(ls {{ fileserver_mount_path }}/input/ | head -n 1);
+            image: "{{ cluster_message_center_image_full_name }}"
+            imagePullPolicy: IfNotPresent
+            name: init-server-load-data
+            resources: 
+              limits: 
+                cpu: "{{ resources.service.cpu.lim }}"
+                memory: "{{ resources.service.mem.lim }}"
+              requests: 
+                cpu: "{{ resources.service.cpu.req }}"
+                memory: "{{ resources.service.mem.req }}"
+            volumeMounts: 
+              - 
+                mountPath: "{{ fileserver_mount_path }}"
+                name: data  
+
+          containers: 
+            - 
+              command: 
+                - /bin/bash
+                - "-c"
+              args:
+                - >- 
+                  file=$( ls {{ fileserver_mount_path }}/input/ | head -n 1 );
+                  echo [DEBUG] processing $file;
+                  python matrix_dbscan.py  {{ fileserver_mount_path }}/input/$file;
+                  outputfile=$( ls {{ fileserver_mount_path }}/result/ | head -n 1 );
+                  echo [DEBUG] completed $outputfile;
+                  echo curl --ftp-create-dirs -T {{ fileserver_mount_path }}/result/$outputfile ftp://{{ fileserver }}:{{ file_port }}/result/;
+                  curl --ftp-create-dirs -T {{ fileserver_mount_path }}/result/$outputfile ftp://{{ fileserver }}:{{ file_port }}/result/;
+                  echo [DEBUG] sent $outputfile;
+              env: 
+                - 
+                  name: OutputDir
+                  value: "{{ fileserver_mount_path }}/result/"
+              
+              image: "{{ processor_image_full_name }}" 
+              imagePullPolicy: IfNotPresent
+              name: planet-graph-processor-pod-container
+              resources: 
+                limits: 
+                  cpu: "{{ resources.job.cpu.lim }}"
+                  memory: "{{ resources.job.mem.lim }}"
+                requests: 
+                  cpu: "{{ resources.job.cpu.req }}"
+                  memory: "{{ resources.job.mem.req }}"
+              volumeMounts: 
+                - 
+                  mountPath: "{{ fileserver_mount_path }}"
+                  name: data
+
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 10
+          volumes: 
+            - 
+              name: data
+              emptyDir: {}
+              # persistentVolumeClaim: 
+              #   claimName: "{{ planet_graph_volume_claim }}"
+
+    

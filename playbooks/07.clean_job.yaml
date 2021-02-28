@@ -1,0 +1,31 @@
+--- 
+  - 
+    gather_facts: false
+    hosts: all
+    pre_tasks:
+      - name: include env vars
+        include_vars: "processor.yaml"
+
+
+    tasks: 
+      - 
+        include_role: 
+          name: processor
+          tasks_from: clean
+        name: "remove processor"
+      - 
+        include_role: 
+          name: rabbitmq
+          tasks_from: clean
+        name: "remove rabbitmq"
+      - 
+        include_role: 
+          name: fileserver
+          tasks_from: clean
+        name: "remove filserver"
+
+      - 
+        include_role: 
+          name: volume
+          tasks_from: clean
+        name: "remove volume"

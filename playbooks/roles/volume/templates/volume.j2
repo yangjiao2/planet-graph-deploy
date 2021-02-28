@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata: 
+  labels: 
+    type: local
+  name: "{{ planet_graph_volume }}"
+spec: 
+  accessModes: 
+    - "{{ planet_graph_volume_access_modes }}"
+  capacity: 
+    storage: "{{ pv_storage }}"
+  hostPath: 
+    path: "{{ base_data_dir }}"
+  persistentVolumeReclaimPolicy: "{{ planet_graph_volume_reclaim_policy }}"
+  storageClassName: manual

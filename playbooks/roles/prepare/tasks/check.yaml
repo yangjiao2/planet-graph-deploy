@@ -1,0 +1,29 @@
+--- 
+  - 
+    debug: 
+      msg: "ansible play host: {{ ansible_host }} "
+    name: "DEBUG info"
+    tags: debug  
+  - 
+    name: "check ansible hostname"
+    register: host_ip_addr
+    shell: "hostname -i | awk '{print $1}'"
+    failed_when: host_ip_addr.stdout != ansible_host
+    tags: debug
+  - 
+    name: "check data bin repository"
+    register: filecheck
+    shell: "[ -f {{ base_data_dir }}/{{ item }} ] && echo 'Located {{ base_data_dir }}/{{ item }}. ' || echo 'Not found {{ base_data_dir }}/{{ item }}. '"
+    with_items: 
+      - data_stable.bin
+      - planetgraph.lic
+      - application.properties
+    tags: debug
+  - 
+    debug: 
+      msg: "{{ host_ip_addr.stdout }} | {{ filecheck.results  | map(attribute='stdout') | join('') }}"
+    name: "DEBUG info"
+    register: result
+    failed_when: "'Not found' in result.msg "
+    tags: debug
+  

@@ -1,0 +1,32 @@
+--- 
+  # - 
+  #   gather_facts: false
+  #   hosts: all
+  #   roles: 
+  #     - remove_fileserver
+  #     - prepare
+  #     - fileserver
+  #     - rollout_service
+  
+
+  - 
+    gather_facts: false
+    hosts: all
+    tasks: 
+      - 
+        include_role: 
+          name: fileserver
+          tasks_from: clean
+        name: "remove filserver"
+      - 
+        include_role: 
+          name: k8s
+        name: "k8s"
+      - 
+        include_role: 
+          name: fileserver
+        name: "fileserver"
+      - 
+        include_role: 
+          name: rollout_service
+        name: "rollout_service"

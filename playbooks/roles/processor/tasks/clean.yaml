@@ -1,0 +1,42 @@
+--- 
+    - 
+      name: "get processor job "
+      register: processor_job
+      shell: "k get job -n {{ k8s_ns }} | grep planet-graph-processor | awk '{print $1}'"
+    - 
+      name: "remove job"
+      shell: " k delete job {{ processor_job.stdout }} -n {{ k8s_ns }}"
+      when: "processor_job.stdout != ''"
+    - 
+      name: "get processor pod "
+      register: processor_pod
+      shell: "k get pod -n {{ k8s_ns }} | grep planet-graph-service-pod  | awk '{print $1}'"
+    - 
+      name: "remove pod"
+      shell: " k delete pod {{ processor_pod.stdout }} -n {{ k8s_ns }}"
+      when: "processor_pod.stdout != ''"
+    - 
+      name: "get messenger sts"
+      register: messenger_sts
+      shell: "k get sts  -n {{ k8s_ns }} | grep planet-graph-rabbitmq-messenger | awk '{print $1}'"
+    - 
+      name: "remove messenger sts"
+      shell: " k delete sts {{ messenger_sts.stdout }} -n {{ k8s_ns }}"
+      when: " messenger_sts.stdout != '' "
+    # - 
+    #   name: "get file server volume claim"
+    #   register: fileserver_volume_claim
+    #   shell: "k get pvc -n {{ k8s_ns }} | grep {{ planet_graph_volume_claim }} | awk '{print $1}'"
+    # - 
+    #   name: "get file server volume"
+    #   register: fileserver_volume
+    #   shell: "k get pv -n {{ k8s_ns }} | grep {{ planet_graph_volume }} | awk '{print $1}'"
+    # - 
+    #   name: "remove fileserver pv claim resources"
+    #   shell: "k delete pvc {{ fileserver_volume_claim.stdout }}  -n {{ k8s_ns }}  "
+    #   when: "fileserver_volume_claim.stdout != '' "
+    # - 
+    #   name: "remove fileserver pv resources"
+    #   shell: "k delete pv {{ fileserver_volume.stdout }}  "
+    #   when: "fileserver_volume.stdout != '' "
+    

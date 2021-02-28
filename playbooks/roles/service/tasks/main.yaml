@@ -1,0 +1,289 @@
+--- 
+  - 
+    name: "show date"
+    register: date
+    shell: /bin/date
+
+  - 
+    name: "register file server content"
+    register: file_server_content
+    # shell: k get svc -n {{ k8s_ns }} | grep planet-graph-fileserver  | awk '{print "curl " $3 }' | sh |  grep -o '<a href.*>\(.*\)>' | sed 's/<\/\?[^>]\+>//g'
+    shell: k get svc -n {{ k8s_ns }} | grep {{ fileserver_hostname }} |  awk '{print "curl ftp://" $3 ":{{ file_port }}"}'  | sh | awk '{print  $9}'
+    # delay: 10
+    # retries: 10
+    tags: debug
+  
+  - 
+    name: "register file server ip"
+    register: file_server_content_cluster_ip
+    shell: k get svc -n {{ k8s_ns }} | grep {{ fileserver_hostname }}  |  awk '{print $3 }'
+
+  - 
+    name: "set fact fileserver cluster ip"
+    set_fact: 
+      fileserver: "{{ file_server_content_cluster_ip.stdout }}"
+
+  - 
+    debug: 
+      msg: "file server content: {{ file_server_content.stdout_lines }}"
+    name: "DEBUG info"
+    tags: debug
+
+  - 
+    k8s: 
+      definition: 
+        apiVersion: v1
+        kind: Service
+        metadata: 
+          name: planet-graph-server
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          ports: 
+            - 
+              nodePort: "{{ openresty_port }}"
+              port: "{{ port }}"
+              targetPort: "{{ port }}"
+          selector: 
+            app: planet-graph-service
+          type: NodePort
+      state: present
+    name: "k8s: create planet graph service"
+  - 
+    name: "register service"
+    register: service_name
+    shell: "k get svc planet-graph-server -o jsonpath='{.metadata.name}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    debug: 
+      msg: "created service: {{ service_name.stdout }}"
+    name: "DEBUG info"
+    tags: debug
+
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        data: 
+          script.sh: >-
+            echo [DEBUG] wget -O {{ fileserver_mount_path }}/data_stable.bin ftp://{{ fileserver }}:{{ file_port }}/data_stable.bin ;
+            wget -O {{ fileserver_mount_path }}/data_stable.bin ftp://{{ fileserver }}:{{ file_port }}/data_stable.bin ;
+            echo [DEBUG] wget -O {{ fileserver_mount_path }}/application.properties  ftp://{{ fileserver }}:{{ file_port }}/application.properties ; 
+            wget -O {{ fileserver_mount_path }}/application.properties  ftp://{{ fileserver }}:{{ file_port }}/application.properties ; 
+            echo [DEBUG]  wget -O {{ fileserver_mount_path }}/planetgraph.lic  ftp://{{ fileserver }}:{{ file_port }}/planetgraph.lic;
+            wget -O {{ fileserver_mount_path }}/planetgraph.lic  ftp://{{ fileserver }}:{{ file_port }}/planetgraph.lic;
+        kind: ConfigMap
+        metadata: 
+          name: dataconfig
+          namespace: "{{ k8s_ns }}"
+    name: "k8s: create dataconfig"
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        kind: Pod
+        metadata: 
+          labels: 
+            app: planet-graph-service
+          name: planet-graph-service-pod
+          namespace: planet-graph-ns
+        spec: 
+          containers: 
+            - 
+              image: "{{ planet_graph_image_full_name }}"
+              name: planet-graph-service-pod-container
+              ports: 
+                - 
+                  containerPort: "{{ port }}"
+              volumeMounts: 
+                - 
+                  mountPath: "{{ fileserver_mount_path }}"
+                  name: configdir
+          initContainers: 
+            - 
+              command: 
+                - /bin/bash
+              args:
+                - "-c"
+                # - "while true; do sleep 30; done; "
+                - "sh /root/script.sh"
+              # command: 
+              #   - sh
+              #   - /root/script.sh
+              image: "{{ cluster_message_center_image_full_name }}"
+              imagePullPolicy: IfNotPresent
+              name: init-server-load-data
+              resources: 
+                limits: 
+                  cpu: "{{ resources.service.cpu.lim }}"
+                  memory: "{{ resources.service.mem.lim }}"
+                requests: 
+                  cpu: "{{ resources.service.cpu.req }}"
+                  memory: "{{ resources.service.mem.req }}"
+              volumeMounts: 
+                - 
+                  mountPath: "{{ fileserver_mount_path }}"
+                  name: configdir
+                - 
+                  mountPath: /root/script.sh
+                  name: dataconfig
+                  readOnly: true
+                  subPath: script.sh
+          volumes: 
+            - 
+              emptyDir: {}
+              name: configdir
+            - 
+              configMap: 
+                items: 
+                  - 
+                    key: script.sh
+                    path: script.sh
+                name: dataconfig
+              name: dataconfig
+    name: "k8s: create planet graph pod"
+  - 
+    k8s: 
+      api_version: apps/v1
+      definition: 
+        kind: Deployment
+        metadata: 
+          name: planet-graph-service-deployment
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          replicas: "{{ replicas }}"
+          selector: 
+            matchLabels: 
+              app: planet-graph-service
+          strategy: 
+            rollingUpdate: 
+              maxSurge: "{{ replicas }}"
+              maxUnavailable: 0
+            type: RollingUpdate
+          template: 
+            metadata: 
+              labels: 
+                app: planet-graph-service
+            spec: 
+              containers: 
+                - 
+                  image: "{{ planet_graph_image_full_name }}"
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe: 
+                    failureThreshold: 10
+                    httpGet: 
+                      path: /planet-graph/v2/query/provinces
+                      port: "{{ port }}"
+                      scheme: HTTP
+                    initialDelaySeconds: 120
+                    periodSeconds: 240
+                    successThreshold: 1
+                    timeoutSeconds: 10
+                  name: planet-graph-container
+                  ports: 
+                    - 
+                      containerPort: "{{ port }}"
+                      protocol: TCP
+                  readinessProbe: 
+                    failureThreshold: 10
+                    httpGet: 
+                      path: /planet-graph/v2/query/provinces
+                      port: "{{ port }}"
+                      scheme: HTTP
+                    initialDelaySeconds: 120
+                    periodSeconds: 30
+                    successThreshold: 2
+                    timeoutSeconds: 10
+                  volumeMounts: 
+                    - 
+                      mountPath: "{{ fileserver_mount_path }}"
+                      name: configdir
+                      namespace: " {{ k8s_ns }}"
+              initContainers: 
+                - 
+                  command: 
+                    - /bin/bash
+                  args:
+                    - "-c"
+                    # - "while true; do sleep 30; done; "
+                    - "sh /root/script.sh"
+                  image: "{{ cluster_message_center_image_full_name }}"
+                  imagePullPolicy: IfNotPresent
+                  name: init-server-load-data
+                  resources: 
+                    limits: 
+                      cpu: "{{ resources.service.cpu.lim}}"
+                      memory: "{{ resources.service.mem.lim}}"
+                    requests: 
+                      cpu: "{{ resources.service.cpu.req}}"
+                      memory: "{{ resources.service.mem.req}}"
+                  volumeMounts: 
+                    - 
+                      mountPath: "{{ fileserver_mount_path }}"
+                      name: configdir
+                    - 
+                      mountPath: /root/script.sh
+                      name: dataconfig
+                      readOnly: true
+                      subPath: script.sh
+              volumes: 
+                - 
+                  emptyDir: {}
+                  name: configdir
+                - 
+                  configMap: 
+                    items: 
+                      - 
+                        key: script.sh
+                        path: script.sh
+                    name: dataconfig
+                  name: dataconfig
+    name: "k8s: create planet graph deployment"
+  - 
+    name: Pause for 3 minutes to build planet graph service cache
+    pause:
+      minutes: "{{ service_delay }}"
+    when: "{{ service_delay }} is defined and {{ service_delay }} != 0"
+
+  - 
+    name: "register deployment"
+    register: deployment_name
+    shell: "k get deployment planet-graph-service-deployment -o jsonpath='{.metadata.name}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    debug: 
+      msg: "created deployment: {{ deployment_name.stdout }}"
+    name: "DEBUG info"
+    tags: debug
+
+  - 
+    name: "planet graph server register service"
+    register: planet_graph_server_ip
+    shell: "k get svc planet-graph-server -o jsonpath='{.spec.clusterIP}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    name: "planet graph server register service port"
+    register: planet_graph_server_port
+    shell: "k get svc planet-graph-server -o  jsonpath='{.spec.ports[0].port}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    debug: 
+      msg: "created planet graph service cluster at: {{ planet_graph_server_ip.stdout }}:{{ planet_graph_server_port.stdout }} external port: {{ openresty_port }}"
+    name: "DEBUG info"
+    tags: debug
+  - 
+    name: "register planet graph service response"
+    register: request_result
+    uri:
+      url: http://{{ ansible_ssh_host }}:{{ openresty_port }}//planet-graph//v2//address//standardize
+      return_content: yes
+    failed_when: request_result.status == -1
+    tags: debug
+  - 
+    debug: 
+      msg: 
+        - "SUCCESS"
+        - "  URL request: {{ ansible_ssh_host }}:{{ openresty_port }}"
+        - "  status code: {{ request_result.status }}"
+    name: "DEBUG info"
+    when: request_result.status != -1
+    tags: debug

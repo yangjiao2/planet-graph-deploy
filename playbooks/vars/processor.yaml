@@ -1,0 +1,22 @@
+## 相同名称覆盖 all.yaml 
+
+# 本地存放路径
+base_data_dir: "/home/wangyayun/address_cluster/cluster_data/1613965896"
+input_data_path: '1613965896'
+
+
+# fileserver 重命名
+fileserver_mount_path_dir: "/data/cluster_data"
+fileserver_port: 31001
+fileserver_hostname: "planet-graph-processor-fileserver"
+
+# storage 数据资源 (处理数据所需磁盘大小有更改，请按需更改)
+pvc_storage: 2Gi
+pv_storage: 2Gi
+
+# 命名空间
+k8s_ns: "planet-graph-processor-ns"
+planet_graph_volume: "planet-graph-processor-volume"
+planet_graph_volume_claim: "planet-graph-processor-volume-claim"
+
+# fileserver_mount_path: "/data/cluster_data/1613965896/"

@@ -1,0 +1,9 @@
+.vscode/
+tmp/*
+
+**/tmp/
+*bin/
+**bin/
+**/roles/*/files/*
+
+k8s_script/

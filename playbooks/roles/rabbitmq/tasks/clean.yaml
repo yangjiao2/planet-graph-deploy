@@ -1,0 +1,17 @@
+--- 
+  - 
+    name: "get planet graph rabbimq deployment "
+    register: rabbitmq_deployment
+    shell: "k get deployment -n {{ k8s_ns }} | grep rabbitmq | awk '{print $1}'"
+  - 
+    name: "remove planet graph rabbitmq deployment "
+    shell: " k delete deployment {{ rabbitmq_deployment.stdout }} -n {{ k8s_ns }}"
+    when: "  rabbitmq_deployment.stdout  != '' "
+  - 
+    name: "get planet graph rabbitmq svc "
+    register: rabbitmq_svc
+    shell: "k get svc -n {{ k8s_ns }} | grep rabbitmq | awk '{print $1}'"
+  - 
+    name: "remove planet graph rabbitmq svc "
+    shell: "k delete svc {{ rabbitmq_svc.stdout }} -n {{ k8s_ns }}"
+    when: "  rabbitmq_svc.stdout  != '' "

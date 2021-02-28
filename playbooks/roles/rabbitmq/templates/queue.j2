@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: queue
+  name: queue
+  namespace: "{{ k8s_ns }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: queue
+  serviceName: rabbitmq-broker
+  template:
+    metadata:
+      labels:
+        app: queue
+    spec:
+      initContainers:
+      - image: "{{ python_image_full_name }}"
+        name: rabbitmq-container
+        command: ["ls"]
+        resources:
+          requests:
+            cpu: 250m
+            memory: 0Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+      containers:
+      - image: "{{ python_image_full_name }}"
+        command: 
+          - python
+          - "-m"
+          - http.server
+        name: queue
+
+
+

@@ -1,0 +1,27 @@
+--- 
+    - 
+      name: "get planet graph service pod "
+      register: service_pod
+      shell: "k get pod -n {{ k8s_ns }} | grep planet-graph-service-pod | awk '{print $1}'"
+    - 
+      name: "remove planet graph service pod "
+      shell: " k delete pod {{ service_pod.stdout }} -n {{ k8s_ns }}"
+      when: "service_pod.stdout != '' "
+    - 
+      name: "get planet graph service deployment "
+      register: service_deployment
+      shell: "k get deployment -n {{ k8s_ns }} | grep planet-graph-service-deployment | awk '{print $1}'"
+    - 
+      name: "remove planet graph service deployment "
+      shell: " k delete deployment {{ service_deployment.stdout }} -n {{ k8s_ns }}"
+      when: "  service_deployment.stdout  != '' "
+    - 
+      name: "get planet graph service svc "
+      register: service_svc
+      shell: "k get svc -n {{ k8s_ns }} | grep planet-graph-server | awk '{print $1}'"
+    - 
+      name: "remove planet graph service svc "
+      shell: "k delete svc {{ service_svc.stdout }} -n {{ k8s_ns }}"
+      when: "  service_svc.stdout  != '' "
+  
+  

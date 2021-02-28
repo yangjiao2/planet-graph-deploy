@@ -1,0 +1,53 @@
+--- 
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        kind: PersistentVolume
+        metadata: 
+          labels: 
+            type: local
+          name: "{{ planet_graph_volume }}"
+        spec: 
+          accessModes: 
+            - "{{ planet_graph_volume_access_modes }}"
+          capacity: 
+            storage: "{{ pv_storage }}"
+          hostPath: 
+            path: "{{ base_data_dir }}"
+          persistentVolumeReclaimPolicy: "{{ planet_graph_volume_reclaim_policy }}"
+          storageClassName: manual
+      name: "k8s: create volume"
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        kind: PersistentVolumeClaim
+        metadata: 
+          name: "{{ planet_graph_volume_claim }}"
+        spec: 
+          accessModes: 
+            - "{{ planet_graph_volume_access_modes }}"
+          persistentVolumeReclaimPolicy: "{{ planet_graph_volume_reclaim_policy }}"
+          resources: 
+            requests: 
+              storage: "{{ pvc_storage }}"
+          storageClassName: manual
+      namespace: "{{ k8s_ns }}"
+    name: "k8s: create claim"
+  - 
+    name: "register volume"
+    register: volume
+    shell: "k get pv | awk 'NR = 1' | grep {{ planet_graph_volume }} | awk '{print $1}'  "
+  - 
+    name: "register volume claim"
+    register: volume_claim
+    shell: "k get pv | awk 'NR = 1' | grep {{ planet_graph_volume_claim }} | awk '{print $6}'  "
+  - 
+    debug: 
+      msg: "created pv and claim: {{ volume.stdout }} and {{ volume_claim.stdout }}"
+    name: "DEBUG info"
+
+      
+
+        

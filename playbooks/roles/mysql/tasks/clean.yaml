@@ -1,0 +1,17 @@
+--- 
+    - 
+      name: "get mysql deployment "
+      register: mysql_deployment
+      shell: "k get deployment -n {{ k8s_ns }} | grep planet-graph-mysql-deployment  | awk '{print $1}'"
+    - 
+      name: "remove mysql deployment"
+      shell: " k delete deployment {{ mysql_deployment.stdout }} -n {{ k8s_ns }}"
+      when: "mysql_deployment.stdout != ''"
+    - 
+      name: "get mysql server svc"
+      register: planet_graph_mysqlserver_svc
+      shell: "k get svc  -n {{ k8s_ns }} | grep planet-graph-mysqlserver | awk '{print $1}'"
+    - 
+      name: "remove mysql server svc"
+      shell: " k delete svc {{ planet_graph_mysqlserver_svc.stdout }} -n {{ k8s_ns }}"
+      when: " planet_graph_mysqlserver_svc.stdout != '' "
