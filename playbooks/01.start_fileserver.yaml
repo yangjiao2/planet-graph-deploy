@@ -1,0 +1,33 @@
+---
+  - hosts: all
+    gather_facts: false
+    roles:
+    - prepare
+    - k8s
+    - volume
+    - mysql
+    - fileserver
+  # - 
+  #   gather_facts: false
+  #   hosts: all
+  #   tasks: 
+  #     - 
+  #       include_role: 
+  #         name: prepare
+  #       name: "prepare"
+  #     - 
+  #       include_role: 
+  #         name: k8s
+  #       name: "k8s"
+  #     - 
+  #       include_role: 
+  #         name: volume
+  #       name: "volume"
+  #     - 
+  #       include_role: 
+  #         name: fileserver
+  #       name: "fileserver"
+  #     - 
+  #       include_role: 
+  #         name: service
+  #       name: "service"

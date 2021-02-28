@@ -1,0 +1,58 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: "{{ fileserver_hostname }}-deployment"
+  namespace: "{{ k8s_ns }}"
+spec:         
+  replicas: {{ fileserver_replica }}
+  selector: 
+    matchLabels: 
+      app: "{{ fileserver_hostname }}-deployment"
+  strategy: 
+    rollingUpdate: 
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template: 
+    metadata: 
+      labels: 
+        app: "{{ fileserver_hostname }}-deployment"
+    spec: 
+      nodeSelector:
+        kubernetes.io/hostname: "{{ ansible_host }}"
+      containers: 
+        - 
+          command: 
+            - python
+            - -m
+            - pyftpdlib
+            - -w
+            - -p
+            - "{{ file_port | string }}"
+            - -d
+            - "{{ fileserver_mount_path }}"
+          image: "{{ python_image_full_name }}"
+          imagePullPolicy: IfNotPresent
+          name: planet-graph-file-server-container
+          ports: 
+            - 
+              containerPort: {{ file_port }}
+              protocol: TCP
+          resources: 
+            limits: 
+              cpu: "{{ resources.fileserver.cpu.lim }}"
+              memory: "{{ resources.fileserver.mem.lim }}"
+            requests: 
+              cpu: "{{ resources.fileserver.cpu.req }}"
+              memory: "{{ resources.fileserver.mem.req }}"
+          volumeMounts: 
+            - 
+              mountPath: "{{ fileserver_mount_path }}"
+              name: planet-graph-data
+              namespace: "{{ k8s_ns }}"
+      volumes: 
+        - 
+          name: planet-graph-data
+          persistentVolumeClaim: 
+            claimName: "{{ planet_graph_volume_claim }}"

@@ -1,0 +1,119 @@
+--- 
+  - 
+    name: copy template on job
+    template:
+      src: "{{ role_path }}/templates/{{ item }}.j2"
+      dest: "{{ role_path }}/files/{{ item }}.yaml"
+      mode: '0644'
+    with_items:
+      - "fileserver"
+      - "fileserver_service"
+  - 
+    name: "create k8s: create fileserver deployment"
+    k8s:
+      state: present
+      definition: "{{ lookup('file', '{{ role_path }}/files/{{ item }}.yaml')  }}"
+    with_items:
+      - "fileserver"
+  # - 
+  #   k8s: 
+  #     api_version: apps/v1
+  #     definition: 
+  #       kind: Deployment
+  #       metadata: 
+  #         name: "{{ fileserver_hostname }}-deployment"
+  #         namespace: "{{ k8s_ns }}"
+  #       spec:         
+  #         replicas: "{{ fileserver_replica }}"
+  #         selector: 
+  #           matchLabels: 
+  #             app: "{{ fileserver_hostname }}-deployment"
+  #         strategy: 
+  #           rollingUpdate: 
+  #             maxSurge: 1
+  #             maxUnavailable: 0
+  #           type: RollingUpdate
+  #         template: 
+  #           metadata: 
+  #             labels: 
+  #               app: "{{ fileserver_hostname }}-deployment"
+  #           spec: 
+  #             nodeSelector:
+  #               kubernetes.io/hostname: "{{ ansible_host }}"
+  #             containers: 
+  #               - 
+  #                 command: 
+  #                   - python
+  #                   - -m
+  #                   - pyftpdlib
+  #                   - -w
+  #                   - -p
+  #                   - "{{ file_port | string }}"
+  #                   - -d
+  #                   - "{{ fileserver_mount_path }}"
+  #                 image: "{{ python_image_full_name }}"
+  #                 imagePullPolicy: IfNotPresent
+  #                 name: planet-graph-file-server-container
+  #                 ports: 
+  #                   - 
+  #                     containerPort: "{{ file_port }}"
+  #                     protocol: TCP
+  #                 resources: 
+  #                   limits: 
+  #                     cpu: "{{ resources.fileserver.cpu.lim }}"
+  #                     memory: "{{ resources.fileserver.mem.lim }}"
+  #                   requests: 
+  #                     cpu: "{{ resources.fileserver.cpu.req }}"
+  #                     memory: "{{ resources.fileserver.mem.req }}"
+  #                 volumeMounts: 
+  #                   - 
+  #                     mountPath: "{{ fileserver_mount_path }}"
+  #                     name: planet-graph-data
+  #                     namespace: "{{ k8s_ns }}"
+  #             volumes: 
+  #               - 
+  #                 name: planet-graph-data
+  #                 persistentVolumeClaim: 
+  #                   claimName: "{{ planet_graph_volume_claim }}"
+  #   name: "k8s: create deployment"
+  - 
+    name: "register deployment"
+    register: deployment_name
+    shell: "k get deployment {{ fileserver_hostname }}-deployment -o jsonpath='{.metadata.name}' -n {{ k8s_ns }} "
+  - 
+    name: "register replicas"
+    register: deployment_replicas_count
+    shell: "k get deployment {{ fileserver_hostname }}-deployment -o jsonpath='{.status.replicas}' -n {{ k8s_ns }} "
+  - 
+    delay: 60
+    name: "wait for deployment has available replicas"
+    register: deployment_available_replicas_count
+    retries: 10
+    shell: "k get deployment {{ fileserver_hostname }}-deployment -n {{ k8s_ns }} -o wide |  tail -n +2  | awk '{print $4 }' "
+    until: "deployment_available_replicas_count.stdout == deployment_replicas_count.stdout"
+  - 
+    debug: 
+      msg: "created deployment: {{ deployment_name.stdout }}"
+    name: "DEBUG info"
+  - 
+    name: "k8s: create file server service"
+    k8s:
+      state: present
+      definition: "{{ lookup('file', '{{ role_path }}/files/{{ item }}.yaml')  }}"
+    with_items:
+      - "fileserver_service"
+  - 
+    name: "file server register service"
+    register:  file_server_ip
+    shell: "k get svc {{ fileserver_hostname }} -o jsonpath='{.spec.clusterIP}' -n {{ k8s_ns }} "
+  - 
+    name: "file server register service port"
+    register:  file_server_port
+    shell: "k get svc {{ fileserver_hostname }} -o  jsonpath='{.spec.ports[0].port}' -n {{ k8s_ns }} "
+  - 
+    debug: 
+      msg: "created file server cluster at: 
+            {{ file_server_ip.stdout }}:{{ file_server_port.stdout }}
+            external port: 
+            {{ fileserver_port }}"
+    name: "DEBUG info"

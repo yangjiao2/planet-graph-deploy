@@ -1,0 +1,7 @@
+--- 
+  - 
+    gather_facts: false
+    hosts: all
+    roles: 
+      - scale_service
+    

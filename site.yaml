@@ -1,0 +1,15 @@
+--- 
+    - 
+      import_playbook: playbooks/01.start_fileserver.yaml
+    - 
+      import_playbook: playbooks/02.start_service.yaml
+    # - 
+    #   import_playbook: playbooks/03.scale.yaml
+    #   when: op == 'scale'
+    # - 
+    #   import_playbook: playbooks/05.rollout.yaml
+    #   when: (op is defined and op == 'rollout')
+    # - 
+    #   import_playbook: playbooks/04.clean.yaml
+    #   tags: clean
+    

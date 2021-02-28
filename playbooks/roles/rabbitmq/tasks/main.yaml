@@ -1,0 +1,38 @@
+--- 
+  - 
+    k8s: 
+      api_version: v1
+      kind: Namespace
+      name: "{{ processor_ns }}"
+      state: present
+    name: "create namespace"
+  - 
+    name: "create file from template"
+    template: 
+      dest: "{{ role_path }}/files/{{ item }}.yaml"
+      mode: "0644"
+      src: "{{ role_path }}/templates/{{ item }}.j2"
+    with_items: 
+      - rabbitmq
+      - rabbitmq_service
+
+  - 
+    k8s: 
+      definition: "{{ lookup('file', '{{ role_path }}/files/{{ item }}.yaml')  }}"
+      state: present
+    name: "start rabbitmq"
+    with_items: 
+      - rabbitmq
+      - rabbitmq_service
+
+  - 
+    name: "register rabbitmq"
+    register: rabbitmq
+    shell: "k get svc -n {{ processor_ns }} | grep rabbitmq  | awk '{print $3 }'"
+  # - 
+  #   name: "transfer files into statefulset"
+  #   shell: 'k cp message_center.py planet-graph-processor-ns/queue-0:/'
+  - 
+    debug: 
+      msg: "created svc: {{ rabbitmq.stdout }}"
+    name: "DEBUG info"

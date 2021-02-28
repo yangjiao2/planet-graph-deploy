@@ -1,0 +1,36 @@
+--- 
+  - 
+    import_tasks: roles/prepare/tasks/check.yaml
+    name: "check data bin"
+  # - 
+  #   name: "unzip package.tar.gz"
+  #   shell: "tar xzf packages.tar.gz"
+  #   tags: initialize
+  # - 
+  #   name: "pip3 install packages"
+  #   shell: "pip3 install openshift-0.11.2.tar.gz PyYAML-5.3.1.tar.gz && pip3 install ansible-base-2.10.4.tar.gz ansible-2.10.4.tar.gz"
+  #   tags: initialize
+  - 
+    failed_when: 
+      - "'Package not found' in package.stdout "
+    name: "check pip package"
+    shell: "pip freeze | grep {{ item }}== || echo 'Package not found {{ item }}' "
+    register: package
+    with_items:
+      - "openshift"
+      - "ansible"
+    tags: debug
+  - 
+    debug: 
+      msg: "{{ package.results  | map(attribute='stdout') | join(', ') }} "
+    name: "DEBUG info"
+    tags: debug
+
+  # - name: Docker load TAR
+  #   shell: "docker load -i {{ items }}.tar"
+  #   with_items:
+  #     - "mysql"
+  #     - "planet-graph"
+  #     - "rabbitmq"
+  #     - "busybox"
+  #     - "python"

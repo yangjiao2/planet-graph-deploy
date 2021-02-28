@@ -1,0 +1,23 @@
+--- 
+  - 
+    gather_facts: false
+    hosts: all
+    tasks: 
+      - 
+        include_role: 
+          name: service
+          tasks_from: clean
+        name: "remove service"
+      
+      - 
+        include_role: 
+          name: fileserver
+          tasks_from: clean
+        name: "remove filserver"
+
+      - 
+        include_role: 
+          name: mysql
+          tasks_from: clean
+        name: "remove mysql"
+  

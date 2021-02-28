@@ -1,0 +1,18 @@
+--- 
+  - 
+    name: "register rabbitmq ip"
+    register: rabbitmq_cluster_ip
+    shell: "k get svc -n {{ k8s_ns }} | grep rabbitmq  |  awk '{print $3 }'"
+  # - 
+  #   name: "register rabbitmq publish info"
+  #   register: rabbitmq_publish
+  #   shell: "curl -u guest:guest http://{{ rabbitmq_cluster_ip.stdout }}:{{ rabbitmq_port }}/api/queues/%2F/task_queue | jq . | grep \"publish\" "
+  # - 
+  #   name: "register rabbitmq ack info"
+  #   register: rabbitmq_ack
+  #   shell: "curl -u guest:guest http://{{ rabbitmq_cluster_ip.stdout }}:{{ rabbitmq_port }}/api/queues/%2F/task_queue | jq . | grep \"ack\" "
+  # - 
+  #   debug: 
+  #     msg: "rabbitmq_publish: {{ rabbitmq_publish.stdout }} , rabbitmq_ack: {{ rabbitmq_ack.stdout }}"
+  #   name: "DEBUG info"
+  

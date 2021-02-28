@@ -1,0 +1,8 @@
+---
+  - 
+    k8s:
+      api_version: v1
+      kind: Namespace
+      name: "{{ k8s_ns }}"
+      state: present
+    name: "k8s: create namespace"

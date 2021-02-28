@@ -1,0 +1,4 @@
+--- 
+  - 
+    import_playbook: playbooks/06.start_job.yaml
+  

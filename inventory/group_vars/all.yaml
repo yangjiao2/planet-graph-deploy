@@ -1,0 +1,112 @@
+
+# 当前路径
+work_dir: "/root/git-repos/planet-graph-deploy"
+
+# 服务bin 文件在本地的路径信息 (非冲突或其他必要情况无需更改)
+base_data_dir: "/mnt/data/data_bin"
+
+# 服务deployment 副本数 (按需更改)
+replicas: 1
+fileserver_replica: 1
+
+# 服务的docker镜像 (按需更改)
+planet_graph_image_full_name: "docker.4pd.io/planet-graph-icbc/planet-graph-service-release:test01"
+python_image_full_name: "docker.4pd.io/cluster-message-center:v0.12" # cluster-message-center is built upon python slim3.7
+busybox_image_full_name: "docker.4pd.io/busybox:1.27.2"
+mysql_image_full_name: "docker.4pd.io/mysql:5.7"
+rabbitmq_image_full_name: "docker.4pd.io/rabbitmq:3.8.5-management"
+processor_image_full_name: "docker.4pd.io/addr_cluster:v1.0"
+cluster_message_center_image_full_name: "docker.4pd.io/cluster-message-center:v1.1"
+ubuntu_image_full_name: "docker.4pd.io/ubuntu:16.04"
+
+# storage 数据资源 (如bin 文件所需磁盘大小有更改，请按需更改)
+pvc_storage: 10Gi
+pv_storage: 10Gi
+
+# MySQL k8s配置
+mysql_host: mysql
+mysql_port: 3306
+mysql_user: root
+mysql_pass: ai4every1
+mysql_mount_path: /data/mnt/mysql
+
+# rabbit_mq
+rabbitmq_mount_path: /data/mnt/rabbitmq
+
+# k8s资源和数据挂载路径配置，可按需修改
+resources:
+  # FileServer管理节点 (请按需更改)
+  fileserver:
+    cpu:
+      req: 100m
+      lim: 2000m
+    mem:
+      req: 100Mi
+      lim: 1000Mi
+  # 星图服务管理节点 (请按需更改)
+  service:
+    cpu:
+      req: 5000m
+      lim: 15000m
+    mem:
+      req: 2Gi
+      lim: 12Gi # 建议大于10Gi
+  # 星图 mysql 数据库 
+  mysql:
+    cpu:
+      req: 100m
+      lim: 4000m
+    mem:
+      req: 0Mi
+      lim: 12Gi
+  # 星图地址聚类批处理
+  job:
+    cpu:
+      req: 100m
+      lim: 1000m
+    mem:
+      req: 100Mi
+      lim: 1Gi
+  
+  rabbitmq:
+    cpu:
+      req: 1000m
+      lim: 4000m
+    mem:
+      req: 1Gi # 建议大于400Mi
+      lim: 10Gi
+    # storage:
+    #   dir: "{{ mysql_mount_path }}"
+
+# 容器内数据路径（按需更改，更改需询问部署人员更改星图服务镜像)
+# local_data_dir: "/mnt/data/data_bin"
+
+# 星图服务容器内部挂载路径 (非冲突或其他必要情况无需更改，更改需询问部署人员更改星图服务镜像)
+fileserver_mount_path: "/home/config"
+
+# k8s hostname 
+fileserver_hostname: planet-graph-fileserver
+mysqlserver_hostname: planet-graph-mysqlserver
+# k8s 命名空间
+k8s_ns: planet-graph-ns
+processor_ns: planet-graph-processor-ns
+
+# 网关暴露端口 
+openresty_port: 30000
+port: 8080
+fileserver_port: 31000
+file_port: 80
+mysqlserver_port: 32000
+rabbitmq_port: 15672
+
+# 默认持久化存储 pv / pvc 名称
+planet_graph_volume: "planet-graph-volume"
+planet_graph_volume_claim: "planet-graph-volume-claim"
+planet_graph_volume_access_modes: "ReadWriteMany"
+planet_graph_volume_reclaim_policy: "Retain"
+
+# 默认星图主服务 cache 启动所需时间，等待重启
+service_delay: 2
+
+# 默认星图批处理服务 JOB 留存时间, 过期后清除
+job_ttl: 260

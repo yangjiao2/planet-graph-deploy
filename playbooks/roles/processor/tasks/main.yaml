@@ -1,0 +1,132 @@
+---   
+  - 
+    name: "include task messenger"
+    include: messager.yaml
+  - 
+    name: "register messenger"
+    register: messager
+    shell: k get po | grep rabbitmq-messenger | awk '{print "k logs " $1 " -c init-server-load-data  | tail -n 1 "}'  | sh
+  - 
+    debug: 
+      msg: "messenger content: {{ messager.stdout }}"
+    name: "DEBUG info"
+    tags: debug   
+  - 
+    name: "register job replica"
+    register: job_replica
+    shell: ls {{ base_data_dir }}/input/ | wc -l
+  - 
+    debug: 
+      msg: "file server info: {{ job_replica.stdout }}"
+    name: "DEBUG info"
+    tags: debug
+  - 
+    name: "set job replica"
+    set_fact:
+      job_replicas: "{{ job_replica.stdout }}"
+      cacheable: true
+  
+  - 
+    name: "include task check"
+    include: check.yaml
+  
+  - 
+    name: "register file server ip"
+    register: file_server_content_cluster_ip
+    shell: k get svc -n {{ k8s_ns }} | grep {{ fileserver_hostname }}  |  awk '{print $3 }'
+  - 
+    name: "set fileserver server cluster ip"
+    set_fact: 
+      fileserver: "{{ file_server_content_cluster_ip.stdout }}"
+      cacheable: true
+  - 
+    debug: 
+      msg: "created with job_replica = {{ job_replica.stdout }}"
+    name: "DEBUG info"
+  - 
+    name: copy template on job
+    template:
+      src: "{{ role_path }}/templates/job.j2"
+      dest: "{{ role_path }}/files/job.yaml"
+      mode: '0644'
+  - 
+    name: trigger job
+    k8s:
+      state: present
+      definition: "{{ lookup('file', '{{ role_path }}/files/job.yaml')  }}"
+  - 
+    name: "k8s: wait for job status become succeeded"
+    shell: "k get job planet-graph-processor -o jsonpath='{.status.succeeded}'"
+    register: job_status
+    until: job_status.stdout == job_replicas
+    retries: 20
+    delay: 10
+    ignore_errors: yes
+  - 
+    name: 'DEBUG'
+    debug:
+      msg: 
+        - "SUCCESS"
+        - " unit count: {{ job_status.stdout }}" 
+
+
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        kind: Pod
+        metadata: 
+          labels: 
+            app: planet-graph-service
+          name: planet-graph-processor-pod
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          containers: 
+            -       
+              command: 
+                - /bin/bash
+                - "-c"
+              args:
+                - >- 
+                  echo [DEBUG] input:  $( ls {{ fileserver_mount_path}} );
+                  echo [DEBUG] result:  $( ls {{ fileserver_mount_path}} );
+                  while true; do sleep 30; done;
+              image: "{{ ubuntu_image_full_name }}"
+              name: planet-graph-service-pod-container
+              volumeMounts: 
+                - 
+                  mountPath: "{{ fileserver_mount_path }}"
+                  name: data
+   
+          volumes: 
+            - 
+              name: data
+              persistentVolumeClaim: 
+                claimName: "{{ planet_graph_volume_claim }}"
+    name: "k8s: create planet graph processor pod"
+
+  # - 
+  #     name: "get processor configmap "
+  #     register: processor_configmap
+  #     shell: "k get cm -n {{ k8s_ns }} | grep dataconfig | awk '{print $1}'"
+    # - 
+    #   name: "k8s: clean up configmap"
+    #   shell: "k delete cm {{ processor_configmap.stdout }} -n {{ k8s_ns }}"
+    #   when: "processor_configmap.stdout != '' "
+    # -    
+    #   name: "get processor messager "
+    #   register: processor_messenger
+    #   shell: "k get sts -n {{ k8s_ns }} | grep rabbitmq-messenger  | awk '{print $1}'"
+    # - 
+    #   name: 'clean up messager'
+    #   shell: "k delete sts {{ processor_messenger.stdout }} -n {{ k8s_ns }}"
+    #   when: "processor_messenger.stdout != '' "
+
+
+    # - name: clean up job resource
+    #   k8s:
+    #     state: absent
+    #     definition: "{{ lookup('file', '{{ role_path }}/files/job.yaml')  }}"
+    #   tags: cleanup
+  
+    # k delete deployment rabbitmq

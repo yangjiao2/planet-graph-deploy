@@ -1,0 +1,20 @@
+--- 
+  - 
+    gather_facts: false
+    hosts: all
+    pre_tasks:
+      - name: include env vars
+        include_vars: "processor.yaml"
+    roles: 
+      - k8s
+      - volume
+      - rabbitmq
+      - fileserver
+      - processor
+    vars:
+      fileserver_mount_path: "{{ fileserver_mount_path_dir }}/{{ input_data_path }}"
+      base_data_dir: "{{ base_dir }}/{{ input_data_path }}"
+
+
+
+  

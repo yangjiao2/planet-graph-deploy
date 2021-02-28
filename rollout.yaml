@@ -1,0 +1,2 @@
+---
+  - import_playbook: playbooks/05.rollout.yaml

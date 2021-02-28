@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: 
+  labels: 
+    type: local
+  name: "{{ planet_graph_volume_claim }}"
+spec: 
+  accessModes: 
+    - "{{ planet_graph_volume_access_modes }}"
+  resources: 
+    requests: 
+      storage: "{{ pvc_storage }}"
+    storageClassName: manual
+    persistentVolumeReclaimPolicy: "{{ planet_graph_volume_reclaim_policy }}"
+namespace: "{{ k8s_ns }}"

@@ -1,0 +1,135 @@
+--- 
+  - 
+    name: "register file server ip"
+    register: file_server_content_cluster_ip
+    shell: k get svc -n {{ k8s_ns }} | grep {{ fileserver_hostname }}  |  awk '{print $3 }'
+
+  - 
+    name: "set fileserver server cluster ip"
+    set_fact: 
+      fileserver: "{{ file_server_content_cluster_ip.stdout }}"
+      cacheable: true
+
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        data: 
+          script.sh: "echo '[DEBUG] wget ftp://{{ fileserver }}:{{ file_port }}/input/ -r --no-host-directories -P {{ fileserver_mount_path}} --accept txt' ; wget ftp://{{ fileserver }}:{{ file_port }}/input/ -r --no-host-directories -P {{ fileserver_mount_path }} --accept txt"
+          start.sh: "echo python3 publish.py {{ fileserver_mount_path }}/input/; echo Current dir: $( ls {{ fileserver_mount_path }} ); mkdir -p {{ fileserver_mount_path }}/result/; python3 publish.py {{ fileserver_mount_path }}/input/"
+        kind: ConfigMap
+        metadata: 
+          name: dataconfig
+          namespace: "{{ k8s_ns }}"
+    name: "k8s: create dataconfig"
+  - 
+    k8s: 
+      api_version: apps/v1
+      definition: 
+        kind: StatefulSet
+        metadata: 
+          labels: 
+            app: planet-graph-rabbitmq-messenger
+          name: planet-graph-rabbitmq-messenger
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          replicas: 1
+          selector: 
+            matchLabels: 
+              app: planet-graph-rabbitmq-messenger
+          serviceName: planet-graph-rabbitmq-messenger
+          template: 
+            metadata: 
+              labels: 
+                app: planet-graph-rabbitmq-messenger
+            spec:
+              containers: 
+                - 
+                  command: 
+                    - sh
+                    - /root/start.sh
+                    # - python3 
+                    # - monitor.py 
+                    # - "{{ fileserver_mount_path}}/input/"
+                  image: "{{ cluster_message_center_image_full_name }}"
+                  name: planet-graph-rabbitmq-messenger-container
+                  # readinessProbe:
+                  #   exec:
+                  #     command:
+                  #     - cd
+                  #     - "{{ fileserver_mount_path }}/result/"
+                  #   periodSeconds: 5
+                  volumeMounts: 
+                    - 
+                      mountPath: "{{ fileserver_mount_path }}"
+                      name: configdir
+                    - 
+                      mountPath: /root/
+                      name: dataconfig
+                      readOnly: true
+              initContainers: 
+                - 
+                  command: 
+                    - sh
+                    - /root/script.sh
+                  image: "{{ cluster_message_center_image_full_name }}"
+                  imagePullPolicy: IfNotPresent
+                  name: init-server-load-data
+                  resources: 
+                    limits: 
+                      cpu: "{{ resources.service.cpu.lim }}"
+                      memory: "{{ resources.service.mem.lim }}"
+                    requests: 
+                      cpu: "{{ resources.service.cpu.req }}"
+                      memory: "{{ resources.service.mem.req }}"
+                  volumeMounts: 
+                    - 
+                      mountPath: "{{ fileserver_mount_path }}"
+                      name: configdir
+                    - 
+                      mountPath: /root/
+                      name: dataconfig
+                      readOnly: true
+                      # subPath: script.sh
+                    # - 
+                    #   mountPath: /root/script.sh
+                    #   name: dataconfig
+                    #   readOnly: true
+                    #   subPath: script.sh
+              volumes: 
+                - 
+                  emptyDir: {}
+                  name: configdir
+                - 
+                  configMap: 
+                    items: 
+                      - 
+                        key: script.sh
+                        path: script.sh
+                      - 
+                        key: start.sh
+                        path: start.sh
+                    name: dataconfig
+                  name: dataconfig
+        # volumeClaimTemplates:
+        # - metadata:
+        #     name: configdir
+        #   spec:
+        #     # storageClassName: arangodb-agency-volume
+        #     resources:
+        #       requests:
+        #         storage: "{{ pv_storage }}"
+        #       accessModes:
+        #       - ReadWriteOnce
+              
+    name: "k8s: create planet graph processor statefulset"
+
+
+  - 
+    name: "register rabbitmq messenger"
+    register: rabbitmq_messenger
+    shell: "k get sts -n {{ processor_ns }} | grep rabbitmq | awk '{print $1}'"
+  - 
+    debug: 
+      msg: "created sts: {{ rabbitmq_messenger.stdout }}"
+    name: "DEBUG info"

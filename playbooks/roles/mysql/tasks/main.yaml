@@ -1,0 +1,123 @@
+--- 
+  - 
+    k8s: 
+      api_version: apps/v1
+      definition: 
+        kind: Deployment
+        metadata: 
+          name: planet-graph-mysql-deployment
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          selector: 
+            matchLabels: 
+              app: planet-graph-mysql-deployment
+          strategy: 
+            type: Recreate
+          template: 
+            metadata: 
+              labels: 
+                app: planet-graph-mysql-deployment
+            spec: 
+              containers: 
+                - 
+                  env: 
+                    - 
+                      name: MYSQL_ROOT_PASSWORD
+                      value: "{{ mysql_pass }}" 
+    
+                  image: "{{ mysql_image_full_name }}"
+                  imagePullPolicy: IfNotPresent
+                  name: planet-graph-mysql-deployment-container
+                  ports: 
+                    - 
+                      containerPort: "{{ mysql_port }}"
+                  volumeMounts:
+                    - 
+                      name: mysql-storage-data
+                      mountPath: "{{ mysql_mount_path }}"
+                  resources:
+                    requests:
+                      cpu: 500m
+                      memory: 2Gi
+                  livenessProbe:
+                    failureThreshold: 3
+                    exec:
+                      command: ["mysqladmin", "ping", "--user={{mysql_user}}", "--password={{ mysql_pass }}"]
+                    initialDelaySeconds: 10
+                    periodSeconds: 30
+                    timeoutSeconds: 5
+                    successThreshold: 1
+                  readinessProbe:
+                    failureThreshold: 3
+                    exec:
+                      command: ["mysql", "--host=127.0.0.1", "--user={{mysql_user}}", "--password={{ mysql_pass }}", "-e", "SELECT 1"]
+                    initialDelaySeconds: 10
+                    periodSeconds: 10
+                    successThreshold: 1
+                    timeoutSeconds: 5
+
+              volumes: 
+                - 
+                  name: mysql-storage-data
+                  emptyDir: {}
+
+       
+    name: "k8s: create deployment"
+  - 
+    name: "register deployment"
+    register: deployment_name
+    shell: "k get deployment planet-graph-mysql-deployment -o jsonpath='{.metadata.name}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    name: "register replicas"
+    register: deployment_replicas_count
+    shell: "k get deployment planet-graph-mysql-deployment -o jsonpath='{.status.replicas}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    shell: "k get deployment planet-graph-mysql-deployment -n {{ k8s_ns }} -o wide |  tail -n +2  | awk '{print $4 }' "
+    delay: 60
+    name: "k8s: wait for deployment has available replicas"
+    retries: 10
+    register: deployment_available_replicas_count
+    until: "deployment_available_replicas_count.stdout == deployment_replicas_count.stdout"
+    tags: debug
+  - 
+    debug: 
+      msg: "created deployment: {{ deployment_name.stdout }} with {{ deployment_available_replicas_count.stdout}}/{{ deployment_replicas_count.stdout }} replicas "
+    name: "DEBUG info"
+    tags: debug
+  - 
+    k8s: 
+      definition: 
+        api_version: v1
+        kind: Service
+        metadata: 
+          name: "{{ mysqlserver_hostname }}"
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          ports: 
+            - 
+              port: "{{ mysql_port }}"
+              targetPort: "{{ mysql_port }}"
+              nodePort: "{{ mysqlserver_port }}"
+          selector: 
+            app: planet-graph-mysql-deployment
+          type: NodePort
+      state: present
+    name: "k8s: create mysql server service"
+  - 
+    name: "mysql server register service"
+    register: mysql_server_ip
+    shell: "k get svc {{ mysqlserver_hostname }} -o jsonpath='{.spec.clusterIP}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    name: "mysql server register service port"
+    register: mysql_server_port
+    shell: "k get svc {{ mysqlserver_hostname }} -o  jsonpath='{.spec.ports[0].port}' -n {{ k8s_ns }} "
+    tags: debug
+  - 
+    debug: 
+      msg: "created mysql cluster at: {{ mysql_server_ip.stdout }}:{{ mysql_server_port.stdout }} external port: {{ mysqlserver_port }}"
+    name: "DEBUG info"
+    tags: debug
+  

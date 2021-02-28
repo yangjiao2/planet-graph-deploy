@@ -1,0 +1,3 @@
+---
+  - import_playbook: playbooks/04.clean.yaml
+  

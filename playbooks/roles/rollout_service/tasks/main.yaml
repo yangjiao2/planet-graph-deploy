@@ -1,0 +1,229 @@
+--- 
+  - 
+    name: "get planet graph service deployment "
+    register: planet_graph_service_deployment
+    shell: "k get deployment -n {{ k8s_ns }} | grep planet-graph-service | awk '{print $1}'"
+  - 
+    debug: 
+      msg: "deployment: {{ planet_graph_service_deployment.stdout }} "
+    name: "DEBUG info:"
+  
+  - 
+    name: "get planet graph service pod "
+    register: planet_graph_service_pod
+    shell: "k get pod -n {{ k8s_ns }} | grep planet-graph-service-pod | awk '{print $1}'"
+  - 
+    debug: 
+      msg: "pod: {{ planet_graph_service_pod.stdout }} "
+    name: "DEBUG info:"
+  - 
+    name: "remove service deployment {{ planet_graph_service_deployment.stdout}}"
+    shell: "k delete deployment {{ planet_graph_service_deployment.stdout }} -n {{ k8s_ns }}"
+    when: "planet_graph_service_deployment.stdout != ''"
+  
+  - 
+    name: "register file server content"
+    register: file_server_content_cluster_ip
+    shell: k get svc -n {{ k8s_ns }} | grep {{ fileserver_hostname }} |  awk '{print $3 }'
+  - 
+    name: "register fileserver cluster ip"
+    set_fact: 
+      fileserver: "{{ file_server_content_cluster_ip.stdout }}"
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        data: 
+          script.sh: >-
+            echo [DEBUG] wget -O {{ fileserver_mount_path }}/data_stable.bin ftp://{{ fileserver }}:{{ file_port }}/data_stable.bin ;
+            wget -O {{ fileserver_mount_path }}/data_stable.bin ftp://{{ fileserver }}:{{ file_port }}/data_stable.bin ;
+            echo [DEBUG] wget -O {{ fileserver_mount_path }}/application.properties  ftp://{{ fileserver }}:{{ file_port }}/application.properties ; 
+            wget -O {{ fileserver_mount_path }}/application.properties  ftp://{{ fileserver }}:{{ file_port }}/application.properties ; 
+            echo [DEBUG]  wget -O {{ fileserver_mount_path }}/planetgraph.lic  ftp://{{ fileserver }}:{{ file_port }}/planetgraph.lic;
+            wget -O {{ fileserver_mount_path }}/planetgraph.lic  ftp://{{ fileserver }}:{{ file_port }}/planetgraph.lic;
+        kind: ConfigMap
+        metadata: 
+          name: dataconfig
+          namespace: "{{ k8s_ns }}"
+    name: "k8s: create dataconfig"  
+  
+  - 
+    k8s: 
+      api_version: apps/v1
+      definition: 
+        kind: Deployment
+        metadata: 
+          name: planet-graph-service-deployment
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          replicas: "{{ replicas }}"
+          selector: 
+            matchLabels: 
+              app: planet-graph-service
+          strategy: 
+            rollingUpdate: 
+              maxSurge: "{{ replicas }}"
+              maxUnavailable: 0
+            type: RollingUpdate
+          template: 
+            metadata: 
+              labels: 
+                app: planet-graph-service
+            spec: 
+              containers: 
+                - 
+                  image: "{{ planet_graph_image_full_name }}"
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe: 
+                    failureThreshold: 10
+                    httpGet: 
+                      path: /planet-graph/v2/query/provinces
+                      port: "{{ port }}"
+                      scheme: HTTP
+                    initialDelaySeconds: 120
+                    periodSeconds: 240
+                    successThreshold: 1
+                    timeoutSeconds: 10
+                  name: planet-graph-container
+                  ports: 
+                    - 
+                      containerPort: "{{ port }}"
+                      protocol: TCP
+                  readinessProbe: 
+                    failureThreshold: 10
+                    httpGet: 
+                      path: /planet-graph/v2/query/provinces
+                      port: "{{ port }}"
+                      scheme: HTTP
+                    initialDelaySeconds: 120
+                    periodSeconds: 30
+                    successThreshold: 2
+                    timeoutSeconds: 10
+                  volumeMounts: 
+                    - 
+                      mountPath: "{{ fileserver_mount_path }}"
+                      name: configdir
+                      namespace: " {{ k8s_ns }}"
+              initContainers: 
+                - 
+                  command: 
+                    - /bin/bash
+                  args:
+                    - "-c"
+                    # - "while true; do sleep 30; done; "
+                    - "sh /root/script.sh"
+                  image: "{{ cluster_message_center_image_full_name }}"
+                  imagePullPolicy: IfNotPresent
+                  name: init-server-load-data
+                  resources: 
+                    limits: 
+                      cpu: "{{ resources.service.cpu.lim}}"
+                      memory: "{{ resources.service.mem.lim}}"
+                    requests: 
+                      cpu: "{{ resources.service.cpu.req}}"
+                      memory: "{{ resources.service.mem.req}}"
+                  volumeMounts: 
+                    - 
+                      mountPath: "{{ fileserver_mount_path }}"
+                      name: configdir
+                    - 
+                      mountPath: /root/script.sh
+                      name: dataconfig
+                      readOnly: true
+                      subPath: script.sh
+              volumes: 
+                - 
+                  emptyDir: {}
+                  name: configdir
+                - 
+                  configMap: 
+                    items: 
+                      - 
+                        key: script.sh
+                        path: script.sh
+                    name: dataconfig
+                  name: dataconfig
+    name: "k8s: create planet graph deployment"   
+
+  - 
+    name: "k8s: register replicas"
+    register: deployment_replicas_count
+    shell: "k get deployment planet-graph-service-deployment -o jsonpath='{.status.replicas}' -n {{ k8s_ns }} "
+  - 
+    delay: 60
+    name: "k8s: wait for deployment has available replicas"
+    register: deployment_available_replicas_count
+    retries: 10
+    shell: "k get deployment planet-graph-service-deployment -o wide -n {{ k8s_ns }} |  tail -n +2  | awk '{print $4 }' "
+    until: "deployment_available_replicas_count.stdout == deployment_replicas_count.stdout"
+  - 
+    name: "register planet graph service deployment"
+    register: planet_graph_service_deployment
+    shell: "k get deployment planet-graph-service-deployment -o jsonpath='{.metadata.name}' -n {{ k8s_ns }} "
+  - 
+    debug: 
+      msg: "created planet graph service deployment: {{ planet_graph_service_deployment.stdout }}"
+    name: "DEBUG info"
+  - 
+    name: "remove planet graph service pod {{ planet_graph_service_pod.stdout }}"
+    shell: "k delete pod {{ planet_graph_service_pod.stdout }} -n {{ k8s_ns }}"
+    when: "planet_graph_service_pod.stdout != ''"
+  - 
+    k8s: 
+      api_version: v1
+      definition: 
+        kind: Pod
+        metadata: 
+          labels: 
+            app: planet-graph-service
+          name: planet-graph-service-pod
+          namespace: "{{ k8s_ns }}"
+        spec: 
+          containers: 
+            - 
+              image: "{{ planet_graph_image_full_name }}"
+              name: planet-graph-service-pod-container
+              ports: 
+                - 
+                  containerPort: "{{ port }}"
+              volumeMounts: 
+                - 
+                  mountPath: "{{ fileserver_mount_path }}"
+                  name: configdir
+          initContainers: 
+            - 
+              command: 
+                - sh
+                - /root/script.sh
+              image: "{{ cluster_message_center_image_full_name }}"
+              name: init-server-load-data
+              resources: 
+                limits: 
+                  cpu: "{{ resources.service.cpu.lim }}"
+                  memory: "{{ resources.service.mem.lim }}"
+                requests: 
+                  cpu: "{{ resources.service.cpu.req }}"
+                  memory: "{{ resources.service.mem.req }}"
+              volumeMounts: 
+                - 
+                  mountPath: "{{ fileserver_mount_path }}"
+                  name: configdir
+                - 
+                  mountPath: /root/script.sh
+                  name: dataconfig
+                  readOnly: true
+                  subPath: script.sh
+          volumes: 
+            - 
+              emptyDir: {}
+              name: configdir
+            - 
+              configMap: 
+                items: 
+                  - 
+                    key: script.sh
+                    path: script.sh
+                name: dataconfig
+              name: dataconfig
+    name: "k8s: create planet graph service pod"
+  

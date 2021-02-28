@@ -1,0 +1,10 @@
+
+# 当前路径
+work_dir: "/root/planet-graph-icbc/planet-graph-deploy"
+
+# 服务bin 文件在本地的路径信息 (非冲突或其他必要情况无需更改)
+base_data_dir: "/mnt/disk0/data/data_bin"
+
+# 服务deployment 副本数 (按需更改)
+replicas: 1
+fileserver_replica: 1
